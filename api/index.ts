@@ -371,11 +371,43 @@ function processM3u8Line(
 // ─── Hono app ─────────────────────────────────────────────────────────────────
 const app = new Hono().basePath("/api");
 
+app.get("/info", (c) => {
+    return c.json({
+        name: "Anime Proxy",
+        version: "1.0.0",
+        description: "High-performance M3U8 and binary proxy for anime streaming.",
+        endpoints: {
+            proxy: {
+                path: "/api/",
+                method: "GET",
+                params: {
+                    url: "Required. The encoded URL to proxy.",
+                    origin: "Optional. Custom Origin header for the upstream request.",
+                    headers: "Optional. JSON string of custom headers.",
+                },
+                description: "Proxies M3U8 manifests (with rewriting) and binary segments.",
+            },
+            info: {
+                path: "/api/info",
+                method: "GET",
+                description: "Returns this information.",
+            },
+        },
+        cors: "Enabled for all origins (*)",
+    }, 200, CORS_HEADERS);
+});
+
 app.options("*", (c) => c.body(null, 204, CORS_HEADERS));
 
 app.get("/", async (c) => {
     const targetUrlRaw = c.req.query("url");
-    if (!targetUrlRaw) return c.text("Missing URL", 400, CORS_HEADERS);
+    if (!targetUrlRaw) {
+        return c.json({
+            message: "Anime Proxy is running!",
+            usage: "/api/?url=<encoded_url>",
+            endpoints: "/api/info",
+        }, 200, CORS_HEADERS);
+    }
 
     let targetUrl: URL;
     try {
