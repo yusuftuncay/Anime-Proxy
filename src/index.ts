@@ -19,6 +19,7 @@ const app = new Hono();
 let requestCount = 0;
 let totalResponseTime = 0;
 const start_time = Date.now();
+const logs: string[] = [];
 
 // Global performance logger & metrics collector
 app.use("*", async (c, next) => {
@@ -27,12 +28,27 @@ app.use("*", async (c, next) => {
     const end = performance.now();
     requestCount++;
     totalResponseTime += (end - start);
+
+    // Track last few proxy requests for the dashboard
+    const url = c.req.query("url");
+    if (url) {
+        const timestamp = new Date().toLocaleTimeString();
+        logs.unshift(`[${timestamp}] Proxied: ${url.substring(0, 50)}...`);
+        if (logs.length > 5) logs.pop();
+    }
 });
 
 // ─── Help & Info Endpoints (HTMX Enhanced) ────────────────────────────────────
 
 app.get("/", handleDashboard);
 app.get("/help", handleDashboard);
+
+app.get("/api/logs", (c) => {
+    const logHtml = logs.length > 0 
+        ? logs.map(l => `<div style="padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; color: #a5a5cc;">${l}</div>`).join("")
+        : `<div style="color: #666; font-style: italic;">No recent activity...</div>`;
+    return c.html(logHtml);
+});
 
 app.get("/api/stats", (c) => {
     const uptimeSeconds = Math.floor((Date.now() - start_time) / 1000);
@@ -163,6 +179,12 @@ app.all("*", async (c) => {
 
     const path = c.req.path;
     const targetUrlRaw = c.req.query("url");
+    const dashboardParam = c.req.query("dashboard");
+
+    // Explicit dashboard request
+    if (dashboardParam === "true" || dashboardParam === "1") {
+        return handleDashboard(c);
+    }
 
     // Relative redirection recovery
     if (!targetUrlRaw) {

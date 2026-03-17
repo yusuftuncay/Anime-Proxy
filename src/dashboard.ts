@@ -235,6 +235,31 @@ const DASHBOARD_HTML = `
             </div>
         </div>
 
+        <div class="card" style="grid-column: 1 / -1; background: linear-gradient(rgba(18, 18, 30, 0.8), rgba(18, 18, 30, 0.8)), url('https://images.unsplash.com/photo-1578632292335-df3abbb0d586?q=80&w=1000&auto=format&fit=crop'); background-size: cover; background-position: center;">
+            <h2>Quick Proxy Search</h2>
+            <p>Paste a manifest or media URL below to stream it instantly through the proxy.</p>
+            <form id="proxy-form" style="display: flex; gap: 10px; margin-top: 1.5rem;">
+                <input type="url" id="proxy-url" placeholder="https://example.com/video.m3u8" required 
+                    style="flex: 1; padding: 1rem; border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.5); color: white; outline: none; transition: border-color 0.3s;">
+                <button type="submit" style="padding: 1rem 2rem; border-radius: 0.75rem; border: none; background: var(--gradient); color: white; font-weight: 800; cursor: pointer; transition: transform 0.2s;">
+                    STREAM
+                </button>
+            </form>
+            <script>
+                document.getElementById('proxy-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const url = document.getElementById('proxy-url').value;
+                    if (url) {
+                        window.location.href = '/?url=' + encodeURIComponent(url);
+                    }
+                });
+                // Focus styling
+                const input = document.getElementById('proxy-url');
+                input.addEventListener('focus', () => input.style.borderColor = 'var(--accent)');
+                input.addEventListener('blur', () => input.style.borderColor = 'rgba(255,255,255,0.1)');
+            </script>
+        </div>
+
         <div class="grid">
             <div class="card">
                 <h2>Direct Proxy</h2>
@@ -242,19 +267,35 @@ const DASHBOARD_HTML = `
                 <code>/?url=ENCODED_URL</code>
             </div>
             <div class="card">
+                <h2>Live Activity</h2>
+                <div id="logs" hx-get="/api/logs" hx-trigger="load, every 3s" style="margin-top: 1rem; border-radius: 0.5rem; background: rgba(0,0,0,0.3); padding: 1rem; height: 150px; overflow-y: hidden;">
+                    <!-- Logs will appear here -->
+                </div>
+            </div>
+            <div class="card">
                 <h2>Health Check</h2>
-                <p>Check granular health status and metrics.</p>
+                <p>Granular system health and metadata JSON.</p>
                 <code>/api/info</code>
             </div>
             <div class="card">
                 <h2>Watch Order</h2>
-                <p>Interactive watch order metadata.</p>
-                <code>/api/watch-order?id=123</code>
+                <p>Fetch Anilist & MAL watch order metadata.</p>
+                <code>/api/watch-order?id=ANILIST_ID</code>
+            </div>
+            <div class="card">
+                <h2>Stats API</h2>
+                <p>Pure HTMX fragment for real-time monitoring.</p>
+                <code>/api/stats</code>
+            </div>
+            <div class="card">
+                <h2>Dashboard Force</h2>
+                <p>Force the UI overlay on any proxy request.</p>
+                <code>?dashboard=true</code>
             </div>
         </div>
 
         <div class="footer">
-            Built for Railway.app &bull; Optimized by <a href="#">Antigravity AI</a>
+            Built for Railway.app &bull; Optimized by <a href="#">Vertixx</a>
         </div>
     </div>
 </body>
