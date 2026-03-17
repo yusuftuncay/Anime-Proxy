@@ -1,14 +1,9 @@
-// Domain-based header templates — 1:1 port of rust-proxy/src/templates.rs
+import { DEFAULT_HEADERS } from "./constants";
 
-export const DEFAULT_HEADERS: Record<string, string> = {
-    "user-agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
-    accept: "*/*",
-    "accept-language": "en-US,en;q=0.5",
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "cross-site",
-};
+/** 
+ * Domain-based header steering logic.
+ * Consolidated from Vercel and Bun templates.
+ */
 
 interface DomainGroup {
     patterns: RegExp[];
@@ -17,7 +12,7 @@ interface DomainGroup {
     customHeaders?: Record<string, string>;
 }
 
-const DOMAIN_GROUPS: DomainGroup[] = [
+export const DOMAIN_GROUPS: DomainGroup[] = [
     {
         patterns: [/\.padorupado\.ru$/i, /\.kwikie\.ru$/i],
         origin: "https://kwik.si",
@@ -227,11 +222,7 @@ const DOMAIN_GROUPS: DomainGroup[] = [
     },
 ];
 
-/**
- * Generate upstream request headers for a target URL.
- * Matches the Rust `generate_headers_for_url` function.
- */
-export function generateHeadersForUrl(
+export function generateHeadersOriginal(
     url: URL,
     customOrigin?: string
 ): Record<string, string> {
@@ -257,8 +248,7 @@ export function generateHeadersForUrl(
             Object.assign(headers, group.customHeaders);
         }
     } else {
-        // Fallback — use the URL's own origin
-        const origin = `${url.protocol}//${url.hostname}`;
+        const origin = url.origin;
         headers["origin"] = origin;
         headers["referer"] = `${origin}/`;
     }
