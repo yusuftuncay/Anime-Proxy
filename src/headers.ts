@@ -14,11 +14,16 @@ interface DomainGroup {
 
 export const DOMAIN_GROUPS: DomainGroup[] = [
     {
-        patterns: [/\.padorupado\.ru$/i, /\.kwikie\.ru$/i],
-        origin: "https://kwik.si",
-        referer: "https://kwik.si/",
-        customHeaders: { "cache-control": "no-cache", pragma: "no-cache" },
-    },
+    patterns: [/\.padorupado\.ru$/i, /\.kwikie\.ru$/i, /kwik\.cx$/i, /kwik\.si$/i, /kwik\.li$/i],
+    origin: "https://kwik.cx",
+    referer: "https://kwik.cx/",
+    customHeaders: { "cache-control": "no-cache", pragma: "no-cache" },
+},
+{
+    patterns: [/animepahe\.(?:com|org|ru|si)$/i, /i\.animepahe\.(?:com|org|ru|si)$/i],
+    origin: "https://animepahe.si",
+    referer: "https://animepahe.si/",
+},
     {
         patterns: [/\.streamtape\.to$/i],
         origin: "https://streamtape.to",
@@ -32,6 +37,9 @@ export const DOMAIN_GROUPS: DomainGroup[] = [
     {
         patterns: [
             /krussdomi\.com$/i,
+            /kami\.to$/i,
+            /mizu\.to$/i,
+            /zen\.to$/i,
             /revolutionizingtheweb\.xyz$/i,
             /nextgentechnologytrends\.xyz$/i,
             /smartinvestmentstrategies\.xyz$/i,
@@ -58,8 +66,8 @@ export const DOMAIN_GROUPS: DomainGroup[] = [
         referer: "https://cloudnestra.com/",
     },
     {
-        patterns: [/(?:^|\.)viddsn\./i, /\.anilike\.cyou$/i],
-        origin: "https://vidwish.live/",
+        patterns: [/(?:^|\.)viddsn\./i, /\.anilike\.cyou$/i, /vidwish\.(?:live|to|com)$/i],
+        origin: "https://vidwish.live",
         referer: "https://vidwish.live/",
     },
     {

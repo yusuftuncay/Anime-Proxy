@@ -28,7 +28,7 @@ export function processM3u8Line(
                     const resolved = resolveUrl(keyUri, scrapeUrl);
                     let q = `url=${encodeURIComponent(resolved.href)}`;
                     if (originParam) q += `&origin=${originParam}`;
-                    return `${line.slice(0, keyUriStart)}/?${q}${line.slice(quotePos)}`;
+                    return `${line.slice(0, keyUriStart)}?${q}${line.slice(quotePos)}`;
                 }
             }
             return line;
@@ -39,7 +39,7 @@ export function processM3u8Line(
             const resolved = resolveUrl(innerUrl, scrapeUrl);
             let q = `url=${encodeURIComponent(resolved.href)}`;
             if (originParam) q += `&origin=${originParam}`;
-            return `#EXT-X-MAP:URI="/?${q}"`;
+            return `#EXT-X-MAP:URI="?${q}"`;
         }
 
         if (line.length > 20 && (line.includes("URI=") || line.includes("URL="))) {
@@ -62,7 +62,7 @@ export function processM3u8Line(
                         const resolved = resolveUrl(value, scrapeUrl);
                         let q = `url=${encodeURIComponent(resolved.href)}`;
                         if (originParam) q += `&origin=${originParam}`;
-                        return `${key}="/?${q}"`;
+                        return `${key}="?${q}"`;
                     }
                     return attr;
                 });
@@ -77,5 +77,5 @@ export function processM3u8Line(
     const resolved = resolveUrl(line, scrapeUrl);
     let q = `url=${encodeURIComponent(resolved.href)}`;
     if (originParam) q += `&origin=${encodeURIComponent(originParam)}`;
-    return `/?${q}`;
+    return `?${q}`;
 }
