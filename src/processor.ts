@@ -10,10 +10,42 @@ export function resolveUrl(line: string, base: URL): URL {
     }
 }
 
+export function buildProxyQuery(url: URL, originParam?: string, debugEnabled = false): string {
+    const params = new URLSearchParams({
+        url: url.href,
+    });
+
+    if (originParam) {
+        params.set("origin", originParam);
+    }
+
+    if (debugEnabled) {
+        params.set("debug", "1");
+    }
+
+    return params.toString();
+}
+
+export function extractManifestDebug(textBody: string) {
+    const lines = textBody.split("\n").map((line) => line.replace(/\r$/, ""));
+    const streamLines = lines.filter((line) => line.startsWith("#EXT-X-STREAM-INF"));
+    const codecs = streamLines
+        .map((line) => line.match(/CODECS="([^"]+)"/)?.[1] ?? null)
+        .filter((value): value is string => Boolean(value));
+
+    return {
+        lineCount: lines.length,
+        variantCount: streamLines.length,
+        codecs: [...new Set(codecs)].slice(0, 8),
+        preview: lines.filter((line) => line.startsWith("#EXT")).slice(0, 8),
+    };
+}
+
 export function processM3u8Line(
     line: string,
     scrapeUrl: URL,
-    originParam?: string
+    originParam?: string,
+    debugEnabled = false,
 ): string {
     if (line.length === 0) return "";
 
@@ -26,8 +58,7 @@ export function processM3u8Line(
                 if (quotePos !== -1) {
                     const keyUri = line.slice(keyUriStart, quotePos);
                     const resolved = resolveUrl(keyUri, scrapeUrl);
-                    let q = `url=${encodeURIComponent(resolved.href)}`;
-                    if (originParam) q += `&origin=${originParam}`;
+                    const q = buildProxyQuery(resolved, originParam, debugEnabled);
                     return `${line.slice(0, keyUriStart)}?${q}${line.slice(quotePos)}`;
                 }
             }
@@ -37,8 +68,7 @@ export function processM3u8Line(
         if (line.startsWith('#EXT-X-MAP:URI="')) {
             const innerUrl = line.slice(16, line.length - 1);
             const resolved = resolveUrl(innerUrl, scrapeUrl);
-            let q = `url=${encodeURIComponent(resolved.href)}`;
-            if (originParam) q += `&origin=${originParam}`;
+            const q = buildProxyQuery(resolved, originParam, debugEnabled);
             return `#EXT-X-MAP:URI="?${q}"`;
         }
 
@@ -60,8 +90,7 @@ export function processM3u8Line(
 
                     if (key === "URI" || key === "URL") {
                         const resolved = resolveUrl(value, scrapeUrl);
-                        let q = `url=${encodeURIComponent(resolved.href)}`;
-                        if (originParam) q += `&origin=${originParam}`;
+                        const q = buildProxyQuery(resolved, originParam, debugEnabled);
                         return `${key}="?${q}"`;
                     }
                     return attr;
@@ -75,7 +104,6 @@ export function processM3u8Line(
     }
 
     const resolved = resolveUrl(line, scrapeUrl);
-    let q = `url=${encodeURIComponent(resolved.href)}`;
-    if (originParam) q += `&origin=${encodeURIComponent(originParam)}`;
+    const q = buildProxyQuery(resolved, originParam, debugEnabled);
     return `?${q}`;
 }

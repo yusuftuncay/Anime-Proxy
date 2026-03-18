@@ -142,6 +142,13 @@ const DASHBOARD_HTML = `
             margin-top: 2rem;
         }
 
+        .example-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
         .card {
             background: var(--card-bg);
             padding: 2.5rem;
@@ -180,6 +187,68 @@ const DASHBOARD_HTML = `
             margin-top: 1rem;
             overflow-x: auto;
             border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .example-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1rem;
+            padding: 1rem;
+        }
+
+        .example-card label {
+            display: block;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            margin-bottom: 0.4rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .example-card input {
+            width: 100%;
+            padding: 0.9rem 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.45);
+            color: white;
+            margin-bottom: 0.75rem;
+        }
+
+        .example-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 0.8rem 1rem;
+            border-radius: 0.75rem;
+            border: none;
+            background: var(--gradient);
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn.secondary {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #05050a;
+            color: #c8ffee;
+            padding: 1rem;
+            border-radius: 0.9rem;
+            border: 1px solid rgba(255,255,255,0.08);
+            margin-top: 1rem;
+            min-height: 160px;
+            max-height: 360px;
+            overflow: auto;
+            font-size: 0.82rem;
         }
 
         .htmx-indicator {
@@ -308,6 +377,11 @@ const DASHBOARD_HTML = `
                 <code>/api/watch-order?id=ANILIST_ID</code>
             </div>
             <div class="card">
+                <h2>Manifest Debug</h2>
+                <p>Inspect codec and variant information for Railway debugging.</p>
+                <code>/api/debug-manifest?url=ENCODED_M3U8_URL&amp;origin=OPTIONAL_ORIGIN</code>
+            </div>
+            <div class="card">
                 <h2>Stats API</h2>
                 <p>Pure HTMX fragment for real-time monitoring.</p>
                 <code>/api/stats</code>
@@ -319,6 +393,37 @@ const DASHBOARD_HTML = `
             </div>
         </div>
 
+        <div class="card" style="margin-top: 2rem;">
+            <h2>Example Requests</h2>
+            <p>Run common API calls directly from the dashboard and inspect beautified JSON output.</p>
+            <div class="example-grid">
+                <div class="example-card">
+                    <label for="watch-order-id">Watch Order AniList ID</label>
+                    <input id="watch-order-id" value="21" />
+                    <div class="example-actions">
+                        <button class="btn" data-endpoint="watch-order">Run Watch Order</button>
+                    </div>
+                </div>
+                <div class="example-card">
+                    <label for="manifest-url">Manifest URL</label>
+                    <input id="manifest-url" placeholder="https://example.com/master.m3u8" />
+                    <label for="manifest-origin">Origin Override</label>
+                    <input id="manifest-origin" placeholder="https://pahe.la" />
+                    <div class="example-actions">
+                        <button class="btn" data-endpoint="manifest-debug">Run Manifest Debug</button>
+                        <button class="btn secondary" data-endpoint="proxy-debug">Open Proxied Debug</button>
+                    </div>
+                </div>
+                <div class="example-card">
+                    <label>Service Metadata</label>
+                    <div class="example-actions">
+                        <button class="btn" data-endpoint="info">Run /api/info</button>
+                    </div>
+                </div>
+            </div>
+            <pre id="example-output">Click an example above to inspect formatted JSON responses.</pre>
+        </div>
+
         <div class="footer">
             Built for Railway.app &bull; Optimized by <a href="https://github.com/vertixx01" target="_blank">Vertixx</a>
             <div class="socials">
@@ -328,6 +433,76 @@ const DASHBOARD_HTML = `
             </div>
         </div>
     </div>
+    <script>
+        const output = document.getElementById('example-output');
+
+        const setOutput = (value) => {
+            output.textContent = value;
+        };
+
+        const runJsonRequest = async (url) => {
+            setOutput('Loading...\\n' + url);
+            try {
+                const response = await fetch(url);
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const text = await response.text();
+                    setOutput(text);
+                    return;
+                }
+
+                const data = await response.json();
+                setOutput(JSON.stringify(data, null, 2));
+            } catch (error) {
+                setOutput(JSON.stringify({
+                    error: error instanceof Error ? error.message : String(error)
+                }, null, 2));
+            }
+        };
+
+        document.querySelectorAll('[data-endpoint]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const action = button.getAttribute('data-endpoint');
+                const watchOrderId = document.getElementById('watch-order-id').value.trim();
+                const manifestUrl = document.getElementById('manifest-url').value.trim();
+                const manifestOrigin = document.getElementById('manifest-origin').value.trim();
+
+                if (action === 'watch-order') {
+                    await runJsonRequest('/api/watch-order?id=' + encodeURIComponent(watchOrderId || '21'));
+                    return;
+                }
+
+                if (action === 'manifest-debug') {
+                    if (!manifestUrl) {
+                        setOutput('Provide a manifest URL first.');
+                        return;
+                    }
+
+                    const params = new URLSearchParams({ url: manifestUrl });
+                    if (manifestOrigin) params.set('origin', manifestOrigin);
+                    await runJsonRequest('/api/debug-manifest?' + params.toString());
+                    return;
+                }
+
+                if (action === 'proxy-debug') {
+                    if (!manifestUrl) {
+                        setOutput('Provide a manifest URL first.');
+                        return;
+                    }
+
+                    const params = new URLSearchParams({ url: manifestUrl, debug: '1' });
+                    if (manifestOrigin) params.set('origin', manifestOrigin);
+                    window.open('/?' + params.toString(), '_blank');
+                    setOutput(JSON.stringify({
+                        opened: '/?' + params.toString()
+                    }, null, 2));
+                    return;
+                }
+
+                await runJsonRequest('/api/info');
+            });
+        });
+    </script>
 </body>
 </html>
 `;

@@ -1,16 +1,14 @@
 import { Hono } from "hono";
-import { logger } from "hono/logger";
 import { getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
-import { 
-    CORS_HEADERS, 
-    PASSTHROUGH_HEADERS, 
-    BLACKLIST_HEADERS, 
-    MEDIA_CACHE_CONTROL 
+import {
+    CORS_HEADERS,
+    BLACKLIST_HEADERS,
+    MEDIA_CACHE_CONTROL,
 } from "./constants";
 import { generateHeadersOriginal } from "./headers";
-import { processM3u8Line, resolveUrl } from "./processor";
+import { buildProxyQuery, extractManifestDebug, processM3u8Line, resolveUrl } from "./processor";
 import { handleDashboard, handleStatsFragment, handleStatusBadge } from "./dashboard";
 
 const app = new Hono();
@@ -171,6 +169,45 @@ app.get("/api/watch-order", async (c) => {
     return c.json(data, 200, { ...CORS_HEADERS, "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=600" });
 });
 
+app.get("/api/debug-manifest", async (c) => {
+    const targetUrlRaw = c.req.query("url");
+    if (!targetUrlRaw) {
+        return c.json({ error: "Missing url parameter" }, 400, CORS_HEADERS);
+    }
+
+    let targetUrl: URL;
+    try {
+        targetUrl = new URL(targetUrlRaw);
+    } catch {
+        return c.json({ error: "Invalid url parameter" }, 400, CORS_HEADERS);
+    }
+
+    const originParam = c.req.query("origin");
+    const upstreamHeaders = generateHeadersOriginal(targetUrl, originParam);
+
+    try {
+        const upstream = await fetch(targetUrl.href, {
+            headers: upstreamHeaders,
+            redirect: "manual",
+            // @ts-ignore
+            tls: { rejectUnauthorized: false },
+        });
+        const contentType = upstream.headers.get("content-type") ?? "";
+        const textBody = await upstream.text();
+
+        return c.json({
+            upstreamUrl: targetUrl.href,
+            origin: originParam ?? null,
+            contentType,
+            status: upstream.status,
+            ...extractManifestDebug(textBody),
+        }, 200, CORS_HEADERS);
+    } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        return c.json({ error: errorMsg }, 502, CORS_HEADERS);
+    }
+});
+
 // ─── Unified Proxy Routine ────────────────────────────────────────────────────
 
 app.all("*", async (c) => {
@@ -180,6 +217,7 @@ app.all("*", async (c) => {
     const path = c.req.path;
     const targetUrlRaw = c.req.query("url");
     const dashboardParam = c.req.query("dashboard");
+    const debugEnabled = c.req.query("debug") === "1";
 
     // Explicit dashboard request
     if (dashboardParam === "true" || dashboardParam === "1") {
@@ -196,7 +234,8 @@ app.all("*", async (c) => {
         const lastHost = getCookie(c, "_last_requested");
         if (lastHost) {
             const remainingPath = path.startsWith("/api") ? path.slice(4) : path;
-            const redirectUrl = `/?url=${encodeURIComponent(lastHost + (remainingPath.startsWith("/") ? "" : "/") + remainingPath)}${c.req.url.split("?")[1] ? "&" + c.req.url.split("?")[1] : ""}`;
+            const redirectTarget = new URL(lastHost + (remainingPath.startsWith("/") ? "" : "/") + remainingPath);
+            const redirectUrl = `/?${buildProxyQuery(redirectTarget, undefined, debugEnabled)}`;
             return c.redirect(redirectUrl);
         }
         return c.text("Missing URL parameter. Usage: /?url=<ENCODED_URL>", 400, CORS_HEADERS);
@@ -261,7 +300,7 @@ app.all("*", async (c) => {
         const location = upstream.headers.get("location");
         if (location) {
             const resolvedLocation = resolveUrl(location, targetUrl);
-            return c.redirect(`/?url=${encodeURIComponent(resolvedLocation.href)}`, upstream.status as any);
+            return c.redirect(`/?${buildProxyQuery(resolvedLocation, originParam, debugEnabled)}`, upstream.status as any);
         }
     }
 
@@ -284,7 +323,17 @@ app.all("*", async (c) => {
             }
 
             if (textBody.trimStart().startsWith("#EXTM3U")) {
-                const rewritten = textBody.split("\n").map((line) => processM3u8Line(line.replace(/\r$/, ""), targetUrl, originParam)).join("\n");
+                const debugInfo = extractManifestDebug(textBody);
+                const rewritten = textBody
+                    .split("\n")
+                    .map((line) => processM3u8Line(line.replace(/\r$/, ""), targetUrl, originParam, debugEnabled))
+                    .join("\n");
+
+                if (debugEnabled) {
+                    responseHeaders["X-Proxy-Debug-Upstream"] = targetUrl.href.slice(0, 200);
+                    responseHeaders["X-Proxy-Debug-Variants"] = String(debugInfo.variantCount);
+                    responseHeaders["X-Proxy-Debug-Codecs"] = debugInfo.codecs.join(" | ").slice(0, 200);
+                }
                 return c.body(rewritten, upstream.status as ContentfulStatusCode, { ...responseHeaders, "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-cache, no-store, must-revalidate" });
             }
             // If it claimed to be m3u8 but isn't, return as is
