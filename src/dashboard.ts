@@ -200,6 +200,30 @@ const DASHBOARD_HTML = `
         .footer a {
             color: var(--accent);
             text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer a:hover {
+            color: #fff;
+        }
+
+        .socials {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .social-link {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 600;
+            opacity: 0.6;
+        }
+
+        .social-link:hover {
+            opacity: 1;
         }
 
         @media (max-width: 600px) {
@@ -211,7 +235,8 @@ const DASHBOARD_HTML = `
 <body>
     <div class="container">
         <header>
-            <h1>Anime Proxy</h1>
+            <h1>Anime Proxy for Astatine Studios</h1>
+            <h2>VexAni & AniKage</h2>
             <p style="color: var(--text-dim); font-size: 1.2rem;">Ultra high-performance M3U8 & Binary Streaming</p>
             <div class="status-badge" hx-get="/api/status" hx-trigger="every 5s" hx-swap="outerHTML">
                 <div class="status-dot"></div>
@@ -235,7 +260,7 @@ const DASHBOARD_HTML = `
             </div>
         </div>
 
-        <div class="card" style="grid-column: 1 / -1; background: linear-gradient(rgba(18, 18, 30, 0.8), rgba(18, 18, 30, 0.8)), url('https://images.unsplash.com/photo-1578632292335-df3abbb0d586?q=80&w=1000&auto=format&fit=crop'); background-size: cover; background-position: center;">
+        <div class="card" style="grid-column: 1 / -1; background: linear-gradient(rgba(18, 18, 30, 0.8), rgba(18, 18, 30, 0.8)), url('https://i.pinimg.com/originals/7e/e3/3e/7ee33e07e6794f7db4e785a5fe731f04.gif'); background-size: cover; background-position: center;">
             <h2>Quick Proxy Search</h2>
             <p>Paste a manifest or media URL below to stream it instantly through the proxy.</p>
             <form id="proxy-form" style="display: flex; gap: 10px; margin-top: 1.5rem;">
@@ -295,7 +320,12 @@ const DASHBOARD_HTML = `
         </div>
 
         <div class="footer">
-            Built for Railway.app &bull; Optimized by <a href="#">Vertixx</a>
+            Built for Railway.app &bull; Optimized by <a href="https://github.com/vertixx01" target="_blank">Vertixx</a>
+            <div class="socials">
+                <a href="https://github.com/vertixx01" target="_blank" class="social-link">GitHub</a>
+                <a href="https://www.linkedin.com/in/rudranil-dev" target="_blank" class="social-link">LinkedIn</a>
+                <a href="mailto:hmu@vertixx.lol" class="social-link">Email</a>
+            </div>
         </div>
     </div>
 </body>

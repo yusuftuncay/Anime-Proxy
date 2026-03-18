@@ -220,6 +220,21 @@ export const DOMAIN_GROUPS: DomainGroup[] = [
         origin: "https://embed.su",
         referer: "https://embed.su/",
     },
+    {
+        patterns: [/hls\.kr$/i, /hls\.kr\.direct$/i],
+        origin: "https://hls.kr",
+        referer: "https://hls.kr/",
+    },
+    {
+        patterns: [/(?:^|\.)vidhosters\.com$/i],
+        origin: "https://vidhosters.com",
+        referer: "https://vidhosters.com/",
+    },
+    {
+        patterns: [/(?:^|\.)pahe\.la$/i, /(?:^|\.)pahe\.li$/i],
+        origin: "https://pahe.la",
+        referer: "https://pahe.la/",
+    },
 ];
 
 export function generateHeadersOriginal(

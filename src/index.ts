@@ -40,7 +40,7 @@ app.use("*", async (c, next) => {
 
 // ─── Help & Info Endpoints (HTMX Enhanced) ────────────────────────────────────
 
-app.get("/", handleDashboard);
+// Dashboard and help handled within the main route to avoid shadowing proxy requests
 app.get("/help", handleDashboard);
 
 app.get("/api/logs", (c) => {
@@ -186,15 +186,20 @@ app.all("*", async (c) => {
         return handleDashboard(c);
     }
 
-    // Relative redirection recovery
+    // Handle dashboard / info at root
     if (!targetUrlRaw) {
+        if (path === "/" || path === "/api" || path === "/api/") {
+            return handleDashboard(c);
+        }
+
+        // Relative redirection recovery
         const lastHost = getCookie(c, "_last_requested");
         if (lastHost) {
             const remainingPath = path.startsWith("/api") ? path.slice(4) : path;
             const redirectUrl = `/?url=${encodeURIComponent(lastHost + (remainingPath.startsWith("/") ? "" : "/") + remainingPath)}${c.req.url.split("?")[1] ? "&" + c.req.url.split("?")[1] : ""}`;
             return c.redirect(redirectUrl);
         }
-        return c.text("Missing URL parameter", 400, CORS_HEADERS);
+        return c.text("Missing URL parameter. Usage: /?url=<ENCODED_URL>", 400, CORS_HEADERS);
     }
 
     let targetUrl: URL;
@@ -228,6 +233,9 @@ app.all("*", async (c) => {
 
     let upstream: Response;
     try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+
         upstream = await fetch(targetUrl.href, {
             method,
             headers: upstreamHeaders,
@@ -235,10 +243,13 @@ app.all("*", async (c) => {
             redirect: "manual",
             // @ts-ignore
             tls: { rejectUnauthorized: false },
+            signal: controller.signal,
         });
+        clearTimeout(timeout);
     } catch (err) {
-        console.error(`Failed to fetch ${targetUrl.href}:`, err);
-        return c.text("Failed to fetch target URL", 502, CORS_HEADERS);
+        console.error(`[Proxy Error] Failed to fetch ${targetUrl.href}:`, err);
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        return c.text(`Target Fetch Failed: ${errorMsg}`, 502, CORS_HEADERS);
     }
 
     // Set cookie for relative redirection recovery
@@ -266,10 +277,21 @@ app.all("*", async (c) => {
     const isM3u8 = contentType.includes("mpegurl") || targetUrl.pathname.toLowerCase().endsWith(".m3u8");
 
     if (isM3u8) {
-        const textBody = await upstream.text();
-        if (textBody.trimStart().startsWith("#EXTM3U")) {
-            const rewritten = textBody.split("\n").map((line) => processM3u8Line(line.replace(/\r$/, ""), targetUrl, originParam)).join("\n");
-            return c.body(rewritten, upstream.status as ContentfulStatusCode, { ...responseHeaders, "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-cache, no-store, must-revalidate" });
+        try {
+            const textBody = await upstream.text();
+            if (!textBody || textBody.length === 0) {
+                return c.body(null, upstream.status as ContentfulStatusCode, responseHeaders);
+            }
+
+            if (textBody.trimStart().startsWith("#EXTM3U")) {
+                const rewritten = textBody.split("\n").map((line) => processM3u8Line(line.replace(/\r$/, ""), targetUrl, originParam)).join("\n");
+                return c.body(rewritten, upstream.status as ContentfulStatusCode, { ...responseHeaders, "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-cache, no-store, must-revalidate" });
+            }
+            // If it claimed to be m3u8 but isn't, return as is
+            return c.body(textBody, upstream.status as ContentfulStatusCode, responseHeaders);
+        } catch (err) {
+            console.error(`[Proxy Error] M3U8 split/process failed:`, err);
+            return c.text("Manifest processing error", 500, CORS_HEADERS);
         }
     }
 

@@ -233,6 +233,21 @@ const DOMAIN_GROUPS: DomainGroup[] = [
         origin: "https://embed.su",
         referer: "https://embed.su/",
     },
+    {
+        patterns: [/hls\.kr$/i, /hls\.kr\.direct$/i],
+        origin: "https://hls.kr",
+        referer: "https://hls.kr/",
+    },
+    {
+        patterns: [/(?:^|\.)vidhosters\.com$/i],
+        origin: "https://vidhosters.com",
+        referer: "https://vidhosters.com/",
+    },
+    {
+        patterns: [/(?:^|\.)pahe\.la$/i, /(?:^|\.)pahe\.li$/i],
+        origin: "https://pahe.la",
+        referer: "https://pahe.la/",
+    },
 ];
 
 function generateHeadersForUrl(
@@ -612,15 +627,21 @@ app.all("*", async (c) => {
     // ── Fetch upstream ──────────────────────────────────────────────────
     let upstream: Response;
     try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
         upstream = await fetch(targetUrl.href, {
             method,
             headers: upstreamHeaders,
             body,
-            redirect: "manual", // Handle redirects manually for Location rewriting
+            redirect: "manual",
+            signal: controller.signal,
         });
+        clearTimeout(timeout);
     } catch (err) {
-        console.error(`Failed to fetch ${targetUrl.href}:`, err);
-        return c.text("Failed to fetch target URL", 502, CORS_HEADERS);
+        console.error(`[Proxy Error] Failed to fetch ${targetUrl.href}:`, err);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        return c.text(`Fetch failed: ${errorMessage}`, 502, CORS_HEADERS);
     }
 
     // Store the base URL in a cookie to help with subsequent relative requests
@@ -664,22 +685,31 @@ app.all("*", async (c) => {
 
     // ── M3U8 rewriting path ─────────────────────────────────────────────
     if (isM3u8ByContentType || isM3u8ByUrl) {
-        const textBody = await upstream.text();
-        const looksLikeM3u8 = textBody.trimStart().startsWith("#EXTM3U");
+        try {
+            const textBody = await upstream.text();
+            if (!textBody || textBody.length === 0) {
+                return c.body(null, upstream.status as ContentfulStatusCode, responseHeaders);
+            }
 
-        if (isM3u8ByContentType || looksLikeM3u8) {
-            const rewritten = textBody
-                .split("\n")
-                .map((line) => processM3u8Line(line.replace(/\r$/, ""), targetUrl, originParam))
-                .join("\n");
+            const looksLikeM3u8 = textBody.trimStart().startsWith("#EXTM3U");
 
-            return c.body(rewritten, upstream.status as ContentfulStatusCode, {
-                ...responseHeaders,
-                "Content-Type": "application/vnd.apple.mpegurl",
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-            });
+            if (isM3u8ByContentType || looksLikeM3u8) {
+                const rewritten = textBody
+                    .split("\n")
+                    .map((line) => processM3u8Line(line.replace(/\r$/, ""), targetUrl, originParam))
+                    .join("\n");
+
+                return c.body(rewritten, upstream.status as ContentfulStatusCode, {
+                    ...responseHeaders,
+                    "Content-Type": "application/vnd.apple.mpegurl",
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                });
+            }
+            return c.body(textBody, upstream.status as ContentfulStatusCode, responseHeaders);
+        } catch (err) {
+            console.error(`[Proxy Error] M3U8 processing failed for ${targetUrl.href}:`, err);
+            return c.text("M3U8 processing failed", 500, CORS_HEADERS);
         }
-        return c.body(textBody, upstream.status as ContentfulStatusCode, responseHeaders);
     }
 
     // ── Passthrough (binary segments, etc.) ─────────────────────────────
