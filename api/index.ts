@@ -56,6 +56,11 @@ const DOMAIN_GROUPS: DomainGroup[] = [
         referer: "https://krussdomi.com/",
     },
     {
+        patterns: [/(?:^|\.)owocdn\.top$/i],
+        origin: "https://kwik.cx",
+        referer: "https://kwik.cx/",
+    },
+    {
         patterns: [/\.akamaized\.net$/i],
         origin: "https://players.akamai.com",
         referer: "https://players.akamai.com/",
@@ -74,6 +79,11 @@ const DOMAIN_GROUPS: DomainGroup[] = [
         patterns: [/(?:^|\.)viddsn\./i, /\.anilike\.cyou$/i],
         origin: "https://vidwish.live/",
         referer: "https://vidwish.live/",
+    },
+    {
+        patterns: [/(?:^|\.)watching\.onl$/i],
+        origin: "https://megaplay.buzz",
+        referer: "https://megaplay.buzz/",
     },
     {
         patterns: [/(?:^|\.)dotstream\./i, /(?:^|\.)playcloud1\./i],
@@ -159,6 +169,123 @@ const DOMAIN_GROUPS: DomainGroup[] = [
         patterns: [/ninstream\.com$/i],
         origin: "https://senshi.live",
         referer: "https://senshi.live/",
+    },
+    {
+        patterns: [/video1\.cdnlibs\.org$/i, /cdnlibs\.org$/i],
+        origin: "https://v3.animelib.org",
+        referer: "https://v3.animelib.org/",
+    },
+    {
+        patterns: [/kodik\.info$/i, /kodik\.cc$/i],
+        origin: "https://kodik.info",
+        referer: "https://kodik.info/",
+    },
+    {
+        patterns: [/video\.sibnet\.ru$/i],
+        origin: "https://video.sibnet.ru",
+        referer: "https://video.sibnet.ru/",
+    },
+    {
+        patterns: [/filemoon\.sx$/i, /filemoon\.to$/i, /filemoon\.in$/i],
+        origin: "https://filemoon.sx",
+        referer: "https://filemoon.sx/",
+    },
+    {
+        patterns: [/doodstream\.com$/i, /dood\.wf$/i, /dood\.re$/i, /d0000d\.com$/i],
+        origin: "https://doodstream.com",
+        referer: "https://doodstream.com/",
+    },
+    {
+        patterns: [/streamwish\.to$/i, /streamwish\.com$/i, /swdyu\.com$/i],
+        origin: "https://streamwish.to",
+        referer: "https://streamwish.to/",
+    },
+    {
+        patterns: [/kisskh\.co$/i],
+        origin: "https://kisskh.co",
+        referer: "https://kisskh.co/",
+    },
+    {
+        patterns: [/watchanimeworld\.in$/i],
+        origin: "https://watchanimeworld.in",
+        referer: "https://watchanimeworld.in/",
+    },
+    {
+        patterns: [/animeworld\.ac$/i, /animeworld\.so$/i],
+        origin: "https://animeworld.ac",
+        referer: "https://animeworld.ac/",
+    },
+    {
+        patterns: [/anicrush\.to$/i],
+        origin: "https://anicrush.to",
+        referer: "https://anicrush.to/",
+        customHeaders: { "x-requested-with": "XMLHttpRequest" },
+    },
+    {
+        patterns: [/anikai\.to$/i, /animekai\.to$/i],
+        origin: "https://anikai.to",
+        referer: "https://anikai.to/",
+    },
+    {
+        patterns: [/1movies\.bz$/i],
+        origin: "https://1movies.bz",
+        referer: "https://1movies.bz/",
+    },
+    {
+        patterns: [/monoschinos2\.net$/i, /monoschinos\.net$/i],
+        origin: "https://wvv.monoschinos2.net",
+        referer: "https://wvv.monoschinos2.net/",
+        customHeaders: { "x-requested-with": "XMLHttpRequest" },
+    },
+    {
+        patterns: [/veranimes\.net$/i],
+        origin: "https://wwv.veranimes.net",
+        referer: "https://wwv.veranimes.net/",
+    },
+    {
+        patterns: [/animetoast\.cc$/i],
+        origin: "https://www.animetoast.cc",
+        referer: "https://www.animetoast.cc/",
+    },
+    {
+        patterns: [/animeler\.pw$/i, /play\.animeler\.pw$/i],
+        origin: "https://play.animeler.pw",
+        referer: "https://play.animeler.pw/",
+    },
+    {
+        patterns: [/vidlink\.pro$/i],
+        origin: "https://vidlink.pro",
+        referer: "https://vidlink.pro/",
+    },
+    {
+        patterns: [/poseidonhd2\.co$/i],
+        origin: "https://poseidonhd2.co",
+        referer: "https://poseidonhd2.co/",
+    },
+    {
+        patterns: [/kaa\.lt$/i, /kickass-anime\.ro$/i],
+        origin: "https://kickass-anime.ro",
+        referer: "https://kickass-anime.ro/",
+    },
+    {
+        patterns: [/mangacloud\.org$/i],
+        origin: "https://mangacloud.org",
+        referer: "https://mangacloud.org/",
+    },
+    {
+        patterns: [/mangapub\.com$/i],
+        origin: "https://mangapub.com",
+        referer: "https://mangapub.com/",
+    },
+    {
+        patterns: [/fireani\.me$/i],
+        origin: "https://fireani.me",
+        referer: "https://fireani.me/",
+    },
+    {
+        patterns: [/aniwatchtv\.to$/i],
+        origin: "https://aniwatchtv.to",
+        referer: "https://aniwatchtv.to/",
     },
     {
         patterns: [
@@ -255,6 +382,24 @@ const DOMAIN_GROUPS: DomainGroup[] = [
     },
 ];
 
+// Cache hostname -> domain group to avoid regex scan per request
+const domainGroupCache = new Map<string, DomainGroup | null>();
+const CACHE_MAX = 512;
+
+function findDomainGroup(hostname: string): DomainGroup | null {
+    const cached = domainGroupCache.get(hostname);
+    if (cached !== undefined) return cached;
+    const group = DOMAIN_GROUPS.find((g) =>
+        g.patterns.some((re) => re.test(hostname))
+    ) ?? null;
+    if (domainGroupCache.size >= CACHE_MAX) {
+        const first = domainGroupCache.keys().next().value;
+        if (first !== undefined) domainGroupCache.delete(first);
+    }
+    domainGroupCache.set(hostname, group);
+    return group;
+}
+
 function generateHeadersForUrl(
     url: URL,
     customOrigin?: string
@@ -269,10 +414,7 @@ function generateHeadersForUrl(
         return headers;
     }
 
-    const hostname = url.hostname;
-    const group = DOMAIN_GROUPS.find((g) =>
-        g.patterns.some((re) => re.test(hostname))
-    );
+    const group = findDomainGroup(url.hostname);
 
     if (group) {
         headers["origin"] = group.origin;
@@ -315,14 +457,14 @@ const PASSTHROUGH_HEADERS = new Set([
 ]);
 
 // Headers to remove from the upstream response before sending to client
-const BLACKLIST_HEADERS = [
+const BLACKLIST_HEADERS = new Set([
     "vary",
     "content-encoding",
     "transfer-encoding",
     "content-length",
     "connection",
     "server",
-];
+]);
 
 function resolveUrl(line: string, base: URL): URL {
     try {
@@ -333,19 +475,10 @@ function resolveUrl(line: string, base: URL): URL {
 }
 
 function buildProxyQuery(url: URL, originParam?: string, debugEnabled = false): string {
-    const params = new URLSearchParams({
-        url: url.href,
-    });
-
-    if (originParam) {
-        params.set("origin", originParam);
-    }
-
-    if (debugEnabled) {
-        params.set("debug", "1");
-    }
-
-    return params.toString();
+    let q = "url=" + encodeURIComponent(url.href);
+    if (originParam) q += "&origin=" + encodeURIComponent(originParam);
+    if (debugEnabled) q += "&debug=1";
+    return q;
 }
 
 function extractManifestDebug(textBody: string) {
@@ -363,6 +496,49 @@ function extractManifestDebug(textBody: string) {
     };
 }
 
+function extractQuotedAttr(s: string, valueStart: number): [string, number] | null {
+    if (s[valueStart] !== '"') return null;
+    const closeQuote = s.indexOf('"', valueStart + 1);
+    if (closeQuote === -1) return null;
+    return [s.slice(valueStart + 1, closeQuote), closeQuote + 1];
+}
+
+function rewriteUriAttrs(attrs: string, scrapeUrl: URL, originParam?: string, debugEnabled = false): string {
+    let result = "";
+    let i = 0;
+    while (i < attrs.length) {
+        const eqPos = attrs.indexOf("=", i);
+        if (eqPos === -1) { result += attrs.slice(i); break; }
+        const key = attrs.slice(i, eqPos);
+        const afterEq = eqPos + 1;
+        if ((key === "URI" || key === "URL") && attrs[afterEq] === '"') {
+            const parsed = extractQuotedAttr(attrs, afterEq);
+            if (parsed) {
+                const [value, afterClose] = parsed;
+                const resolved = resolveUrl(value, scrapeUrl);
+                const q = buildProxyQuery(resolved, originParam, debugEnabled);
+                result += `${key}="/?${q}"`;
+                i = afterClose;
+                continue;
+            }
+        }
+        if (attrs[afterEq] === '"') {
+            const parsed = extractQuotedAttr(attrs, afterEq);
+            if (parsed) {
+                const [, afterClose] = parsed;
+                result += attrs.slice(i, afterClose);
+                i = afterClose;
+                continue;
+            }
+        }
+        const commaPos = attrs.indexOf(",", afterEq);
+        if (commaPos === -1) { result += attrs.slice(i); break; }
+        result += attrs.slice(i, commaPos + 1);
+        i = commaPos + 1;
+    }
+    return result;
+}
+
 function processM3u8Line(
     line: string,
     scrapeUrl: URL,
@@ -372,52 +548,14 @@ function processM3u8Line(
     if (line.length === 0) return "";
 
     if (line[0] === "#") {
-        if (line.startsWith("#EXT-X-KEY")) {
-            const uriStart = line.indexOf('URI="');
-            if (uriStart !== -1) {
-                const keyUriStart = uriStart + 5;
-                const quotePos = line.indexOf('"', keyUriStart);
-                if (quotePos !== -1) {
-                    const keyUri = line.slice(keyUriStart, quotePos);
-                    const resolved = resolveUrl(keyUri, scrapeUrl);
-                    const q = buildProxyQuery(resolved, originParam, debugEnabled);
-                    return `${line.slice(0, keyUriStart)}/?${q}${line.slice(quotePos)}`;
-                }
-            }
-            return line;
-        }
-
-        if (line.startsWith('#EXT-X-MAP:URI="')) {
-            const innerUrl = line.slice(16, line.length - 1);
-            const resolved = resolveUrl(innerUrl, scrapeUrl);
-            const q = buildProxyQuery(resolved, originParam, debugEnabled);
-            return `#EXT-X-MAP:URI="/?${q}"`;
-        }
-
-        if (line.length > 20 && (line.includes("URI=") || line.includes("URL="))) {
+        if (line.length > 20 && (line.includes('URI="') || line.includes('URL="'))) {
             const colonPos = line.indexOf(":");
             if (colonPos !== -1) {
                 const prefix = line.slice(0, colonPos + 1);
                 const attrs = line.slice(colonPos + 1);
-                const rewrittenAttrs = attrs.split(",").map((attr) => {
-                    const eqPos = attr.indexOf("=");
-                    if (eqPos === -1) return attr;
-                    const key = attr.slice(0, eqPos).trim();
-                    const value = attr
-                        .slice(eqPos + 1)
-                        .trim()
-                        .replace(/^"|"$/g, "");
-                    if (key === "URI" || key === "URL") {
-                        const resolved = resolveUrl(value, scrapeUrl);
-                        const q = buildProxyQuery(resolved, originParam, debugEnabled);
-                        return `${key}="/?${q}"`;
-                    }
-                    return attr;
-                });
-                return prefix + rewrittenAttrs.join(",");
+                return prefix + rewriteUriAttrs(attrs, scrapeUrl, originParam, debugEnabled);
             }
         }
-
         return line;
     }
 
@@ -702,7 +840,10 @@ app.all("*", async (c) => {
         try {
             const parsed = JSON.parse(headersParam);
             for (const [k, v] of Object.entries(parsed)) {
-                upstreamHeaders[k.toLowerCase()] = String(v);
+                const key = k.toLowerCase();
+                // Never let the client override origin/referer — domain group logic owns those
+                if (key === "origin" || key === "referer") continue;
+                upstreamHeaders[key] = String(v);
             }
         } catch { /* ignore */ }
     }
@@ -760,15 +901,17 @@ app.all("*", async (c) => {
     // ── Build Response Headers ──────────────────────────────────────────
     const responseHeaders: Record<string, string> = { ...CORS_HEADERS };
     for (const [name, value] of upstream.headers.entries()) {
-        const lowerName = name.toLowerCase();
-        if (!BLACKLIST_HEADERS.includes(lowerName)) {
+        if (!BLACKLIST_HEADERS.has(name.toLowerCase())) {
             responseHeaders[name] = value;
         }
     }
 
-    // Force cache media segments on Vercel Edge to heavily reduce Fast Origin Transfer
-    // Since these are video segments, they are immutable and can be cached long-term.
-    responseHeaders["Cache-Control"] = "public, max-age=31536000, s-maxage=31536000, immutable";
+    // Only apply immutable cache to actual media segments
+    const ext = targetUrl.pathname.split(".").pop()?.toLowerCase() ?? "";
+    const isMediaSegment = ext === "ts" || ext === "mp4" || ext === "m4s" || ext === "aac" || ext === "vtt" || ext === "webm";
+    if (isMediaSegment) {
+        responseHeaders["Cache-Control"] = "public, max-age=31536000, s-maxage=31536000, immutable";
+    }
 
     const contentType = (upstream.headers.get("content-type") ?? "").toLowerCase();
     const isM3u8ByContentType =
@@ -788,10 +931,18 @@ app.all("*", async (c) => {
             const looksLikeM3u8 = textBody.trimStart().startsWith("#EXTM3U");
 
             if (isM3u8ByContentType || looksLikeM3u8) {
-                const rewritten = textBody
-                    .split("\n")
-                    .map((line) => processM3u8Line(line.replace(/\r$/, ""), targetUrl, originParam))
-                    .join("\n");
+                const lines: string[] = [];
+                let start = 0;
+                const len = textBody.length;
+                while (start < len) {
+                    let end = textBody.indexOf("\n", start);
+                    if (end === -1) end = len;
+                    let line = textBody.slice(start, end);
+                    if (line.endsWith("\r")) line = line.slice(0, -1);
+                    lines.push(processM3u8Line(line, targetUrl, originParam));
+                    start = end + 1;
+                }
+                const rewritten = lines.join("\n");
 
                 return c.body(rewritten, upstream.status as ContentfulStatusCode, {
                     ...responseHeaders,
