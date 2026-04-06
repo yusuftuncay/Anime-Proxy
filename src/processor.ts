@@ -10,12 +10,11 @@ export function resolveUrl(line: string, base: URL): URL {
     }
 }
 
-export function buildProxyQuery(url: URL, originParam?: string, debugEnabled = false, encrypt?: (u: string) => string): string {
+export function buildProxyQuery(url: URL, debugEnabled = false, encrypt?: (u: string) => string): string {
     if (encrypt) {
         return "u=" + encrypt(url.href);
     }
     let q = "url=" + encodeURIComponent(url.href);
-    if (originParam) q += "&origin=" + encodeURIComponent(originParam);
     if (debugEnabled) q += "&debug=1";
     return q;
 }
@@ -50,7 +49,7 @@ function extractQuotedAttr(line: string, valueStart: number): [string, number] |
  * Rewrite all URI="..." and URL="..." occurrences in an HLS attribute list,
  * correctly skipping over quoted values that may contain commas.
  */
-function rewriteUriAttrs(attrs: string, scrapeUrl: URL, originParam?: string, debugEnabled = false, encrypt?: (u: string) => string): string {
+function rewriteUriAttrs(attrs: string, scrapeUrl: URL, debugEnabled = false, encrypt?: (u: string) => string): string {
     let result = "";
     let i = 0;
     while (i < attrs.length) {
@@ -65,7 +64,7 @@ function rewriteUriAttrs(attrs: string, scrapeUrl: URL, originParam?: string, de
             if (parsed) {
                 const [value, afterClose] = parsed;
                 const resolved = resolveUrl(value, scrapeUrl);
-                const q = buildProxyQuery(resolved, originParam, debugEnabled, encrypt);
+                const q = buildProxyQuery(resolved, debugEnabled, encrypt);
                 result += `${key}="?${q}"`;
                 i = afterClose;
                 continue;
@@ -95,7 +94,7 @@ function rewriteUriAttrs(attrs: string, scrapeUrl: URL, originParam?: string, de
 export function processM3u8Line(
     line: string,
     scrapeUrl: URL,
-    originParam?: string,
+    _unused?: string,
     debugEnabled = false,
     encrypt?: (u: string) => string,
 ): string {
@@ -107,13 +106,13 @@ export function processM3u8Line(
             if (colonPos !== -1) {
                 const prefix = line.slice(0, colonPos + 1);
                 const attrs = line.slice(colonPos + 1);
-                return prefix + rewriteUriAttrs(attrs, scrapeUrl, originParam, debugEnabled, encrypt);
+                return prefix + rewriteUriAttrs(attrs, scrapeUrl, debugEnabled, encrypt);
             }
         }
         return line;
     }
 
     const resolved = resolveUrl(line, scrapeUrl);
-    const q = buildProxyQuery(resolved, originParam, debugEnabled, encrypt);
+    const q = buildProxyQuery(resolved, debugEnabled, encrypt);
     return `?${q}`;
 }

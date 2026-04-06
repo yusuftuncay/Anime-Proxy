@@ -402,17 +402,8 @@ function findDomainGroup(hostname: string): DomainGroup | null {
 
 function generateHeadersForUrl(
     url: URL,
-    customOrigin?: string
 ): Record<string, string> {
     const headers: Record<string, string> = { ...DEFAULT_HEADERS };
-
-    if (customOrigin) {
-        headers["origin"] = customOrigin;
-        headers["referer"] = customOrigin.endsWith("/")
-            ? customOrigin
-            : `${customOrigin}/`;
-        return headers;
-    }
 
     const group = findDomainGroup(url.hostname);
 
@@ -474,9 +465,8 @@ function resolveUrl(line: string, base: URL): URL {
     }
 }
 
-function buildProxyQuery(url: URL, originParam?: string, debugEnabled = false): string {
+function buildProxyQuery(url: URL, debugEnabled = false): string {
     let q = "url=" + encodeURIComponent(url.href);
-    if (originParam) q += "&origin=" + encodeURIComponent(originParam);
     if (debugEnabled) q += "&debug=1";
     return q;
 }
@@ -503,7 +493,7 @@ function extractQuotedAttr(s: string, valueStart: number): [string, number] | nu
     return [s.slice(valueStart + 1, closeQuote), closeQuote + 1];
 }
 
-function rewriteUriAttrs(attrs: string, scrapeUrl: URL, originParam?: string, debugEnabled = false): string {
+function rewriteUriAttrs(attrs: string, scrapeUrl: URL, debugEnabled = false): string {
     let result = "";
     let i = 0;
     while (i < attrs.length) {
@@ -516,7 +506,7 @@ function rewriteUriAttrs(attrs: string, scrapeUrl: URL, originParam?: string, de
             if (parsed) {
                 const [value, afterClose] = parsed;
                 const resolved = resolveUrl(value, scrapeUrl);
-                const q = buildProxyQuery(resolved, originParam, debugEnabled);
+                const q = buildProxyQuery(resolved, debugEnabled);
                 result += `${key}="/?${q}"`;
                 i = afterClose;
                 continue;
@@ -542,7 +532,6 @@ function rewriteUriAttrs(attrs: string, scrapeUrl: URL, originParam?: string, de
 function processM3u8Line(
     line: string,
     scrapeUrl: URL,
-    originParam?: string,
     debugEnabled = false,
 ): string {
     if (line.length === 0) return "";
@@ -553,123 +542,15 @@ function processM3u8Line(
             if (colonPos !== -1) {
                 const prefix = line.slice(0, colonPos + 1);
                 const attrs = line.slice(colonPos + 1);
-                return prefix + rewriteUriAttrs(attrs, scrapeUrl, originParam, debugEnabled);
+                return prefix + rewriteUriAttrs(attrs, scrapeUrl, debugEnabled);
             }
         }
         return line;
     }
 
     const resolved = resolveUrl(line, scrapeUrl);
-    const q = buildProxyQuery(resolved, originParam, debugEnabled);
+    const q = buildProxyQuery(resolved, debugEnabled);
     return `/?${q}`;
-}
-
-// ─── Watch Order Helpers ───────────────────────────────────────────────────────
-
-async function getMalIdFromAnilistId(anilistId: number): Promise<number | null> {
-    const query = `
-    query ($id: Int) {
-      Media (id: $id, type: ANIME) {
-        idMal
-      }
-    }
-    `;
-    try {
-        const response = await fetch("https://graphql.anilist.co", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-            },
-            body: JSON.stringify({
-                query,
-                variables: { id: anilistId },
-            }),
-        });
-        const data = await response.json();
-        return data?.data?.Media?.idMal || null;
-    } catch (err) {
-        console.error("AniList API error:", err);
-        return null;
-    }
-}
-
-async function scrapeWatchOrder(malId: number) {
-    const url = `https://chiaki.site/?/tools/watch_order/id/${malId}`;
-    try {
-        const response = await fetch(url, {
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-        });
-
-        if (!response.ok) return null;
-        const html = await response.text();
-
-        const entries: any[] = [];
-        // Match TR tags that have data-id
-        const trRegex = /<tr[^>]+data-id="(\d+)"[^>]*>([\s\S]*?)<\/tr>/g;
-        let match;
-
-        while ((match = trRegex.exec(html)) !== null) {
-            const trTag = match[0];
-            const content = match[2];
-
-            // Extract attributes from the tr tag itself
-            const idAttr = trTag.match(/data-id="(\d+)"/);
-            const typeAttr = trTag.match(/data-type="(\d+)"/);
-            const epsAttr = trTag.match(/data-eps="(\d+)"/);
-            const anilistIdAttr = trTag.match(/data-anilist-id="(\d*)"/);
-
-            if (!idAttr || !typeAttr) continue;
-
-            const type = parseInt(typeAttr[1]);
-            // Filter: TV (1) and Movie (3)
-            if (type !== 1 && type !== 3) continue;
-
-            const titleMatch = content.match(/<span class="wo_title">([\s\S]*?)<\/span>/);
-            const secondaryTitleMatch = content.match(/<span class="uk-text-small">([\s\S]*?)<\/span>/);
-            const imageMatch = content.match(/style="background-image:url\('([^']+)'\)"/);
-            const metaMatch = content.match(/<span class="wo_meta">([\s\S]*?)<\/span>/);
-            const ratingMatch = content.match(/<span class="wo_rating">([\s\S]*?)<\/span>/);
-
-            const metaRaw = metaMatch ? metaMatch[1].replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim() : "";
-            const parts = metaRaw.split('|').map(p => p.trim()).filter(p => p && !p.includes('★'));
-
-            let episodesCount = null;
-            let duration = null;
-            const epInfo = parts[2] || "";
-            if (epInfo.includes('×')) {
-                const [e, d] = epInfo.split('×').map(s => s.trim());
-                episodesCount = e;
-                duration = d;
-            } else if (epInfo) {
-                duration = epInfo;
-            }
-
-            entries.push({
-                malId: parseInt(idAttr[1]),
-                anilistId: anilistIdAttr && anilistIdAttr[1] ? parseInt(anilistIdAttr[1]) : null,
-                title: titleMatch ? titleMatch[1].trim() : "Unknown",
-                secondaryTitle: secondaryTitleMatch ? secondaryTitleMatch[1].trim() : null,
-                type: type === 1 ? "TV" : "Movie",
-                episodes: epsAttr ? parseInt(epsAttr[1]) : 0,
-                image: imageMatch ? `https://chiaki.site/${imageMatch[1]}` : null,
-                metadata: {
-                    date: parts[0] || null,
-                    type: parts[1] || null,
-                    episodes: episodesCount,
-                    duration: duration
-                },
-                rating: ratingMatch ? ratingMatch[1].trim() : null
-            });
-        }
-
-        return entries;
-    } catch (err) {
-        console.error("Scraping error:", err);
-        return null;
-    }
 }
 
 // ─── Hono app ─────────────────────────────────────────────────────────────────
@@ -691,12 +572,6 @@ function handleInfo(c: any) {
                 description: "Main proxy route. Expects 'url' parameter.",
                 status: "Operational"
             },
-            watch_order: {
-                path: "/api/watch-order",
-                method: "GET",
-                description: "Scrape watch order from chiaki.site using AniList ID.",
-                status: "Operational"
-            },
             debug_manifest: {
                 path: "/api/debug-manifest",
                 method: "GET",
@@ -716,36 +591,6 @@ function handleInfo(c: any) {
 app.get("/api/info", handleInfo);
 app.get("/info", handleInfo);
 
-app.get("/api/watch-order", async (c) => {
-    const anilistIdRaw = c.req.query("id");
-    if (!anilistIdRaw) {
-        return c.json({ error: "Missing anilistId parameter" }, 400, CORS_HEADERS);
-    }
-
-    const anilistId = parseInt(anilistIdRaw);
-    if (isNaN(anilistId)) {
-        return c.json({ error: "Invalid anilistId" }, 400, CORS_HEADERS);
-    }
-
-    // 1. Convert AniList ID to MAL ID
-    const malId = await getMalIdFromAnilistId(anilistId);
-    if (!malId) {
-        return c.json({ error: "Could not find MAL ID for this AniList ID" }, 404, CORS_HEADERS);
-    }
-
-    // 2. Scrape watch order from chiaki.site
-    const watchOrder = await scrapeWatchOrder(malId);
-    if (!watchOrder) {
-        return c.json({ error: "Failed to fetch watch order data" }, 502, CORS_HEADERS);
-    }
-
-    // 3. Return clean JSON with caching
-    return c.json(watchOrder, 200, {
-        ...CORS_HEADERS,
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=600",
-    });
-});
-
 app.get("/api/debug-manifest", async (c) => {
     const targetUrlRaw = c.req.query("url");
     if (!targetUrlRaw) {
@@ -759,8 +604,7 @@ app.get("/api/debug-manifest", async (c) => {
         return c.json({ error: "Invalid url parameter" }, 400, CORS_HEADERS);
     }
 
-    const originParam = c.req.query("origin");
-    const upstreamHeaders = generateHeadersForUrl(targetUrl, originParam);
+    const upstreamHeaders = generateHeadersForUrl(targetUrl);
 
     try {
         const upstream = await fetch(targetUrl.href, {
@@ -772,7 +616,6 @@ app.get("/api/debug-manifest", async (c) => {
 
         return c.json({
             upstreamUrl: targetUrl.href,
-            origin: originParam ?? null,
             contentType,
             status: upstream.status,
             ...extractManifestDebug(textBody),
@@ -792,7 +635,6 @@ app.all("*", async (c) => {
 
     const path = c.req.path;
     const targetUrlRaw = c.req.query("url");
-    const originParam = c.req.query("origin");
     const debugEnabled = c.req.query("debug") === "1";
 
     // ── Handle requests without 'url' param ────────────────────────────
@@ -807,7 +649,7 @@ app.all("*", async (c) => {
             const remainingPath = path.startsWith("/api") ? path.slice(4) : path;
             const separator = remainingPath.startsWith("/") ? "" : "/";
             const redirectTarget = new URL(lastHost + separator + remainingPath);
-            const redirectUrl = `/?${buildProxyQuery(redirectTarget, undefined, debugEnabled)}`;
+            const redirectUrl = `/?${buildProxyQuery(redirectTarget, debugEnabled)}`;
             return c.redirect(redirectUrl);
         }
 
@@ -826,7 +668,7 @@ app.all("*", async (c) => {
     const jsonParam = c.req.query("json");
 
     // ── Build upstream request ──────────────────────────────────────────
-    const upstreamHeaders = generateHeadersForUrl(targetUrl, originParam);
+    const upstreamHeaders = generateHeadersForUrl(targetUrl);
 
     // Forward client headers (Range, etc.)
     const clientHeaders = c.req.raw.headers;
@@ -939,7 +781,7 @@ app.all("*", async (c) => {
                     if (end === -1) end = len;
                     let line = textBody.slice(start, end);
                     if (line.endsWith("\r")) line = line.slice(0, -1);
-                    lines.push(processM3u8Line(line, targetUrl, originParam));
+                    lines.push(processM3u8Line(line, targetUrl));
                     start = end + 1;
                 }
                 const rewritten = lines.join("\n");

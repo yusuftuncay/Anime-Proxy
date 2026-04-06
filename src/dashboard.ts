@@ -304,8 +304,7 @@ const DASHBOARD_HTML = `
 <body>
     <div class="container">
         <header>
-            <h1>Anime Proxy for Astatine Studios</h1>
-            <h2>VexAni & AniKage</h2>
+            <h1>Anime Proxy</h1>
             <p style="color: var(--text-dim); font-size: 1.2rem;">Ultra high-performance M3U8 & Binary Streaming</p>
             <div class="status-badge" hx-get="/api/status" hx-trigger="every 5s" hx-swap="outerHTML">
                 <div class="status-dot"></div>
@@ -361,25 +360,14 @@ const DASHBOARD_HTML = `
                 <code>/?url=ENCODED_URL</code>
             </div>
             <div class="card">
-                <h2>Live Activity</h2>
-                <div id="logs" hx-get="/api/logs" hx-trigger="load, every 3s" style="margin-top: 1rem; border-radius: 0.5rem; background: rgba(0,0,0,0.3); padding: 1rem; height: 150px; overflow-y: hidden;">
-                    <!-- Logs will appear here -->
-                </div>
-            </div>
-            <div class="card">
                 <h2>Health Check</h2>
                 <p>Granular system health and metadata JSON.</p>
                 <code>/api/info</code>
             </div>
             <div class="card">
-                <h2>Watch Order</h2>
-                <p>Fetch Anilist & MAL watch order metadata.</p>
-                <code>/api/watch-order?id=ANILIST_ID</code>
-            </div>
-            <div class="card">
                 <h2>Manifest Debug</h2>
                 <p>Inspect codec and variant information for Railway debugging.</p>
-                <code>/api/debug-manifest?url=ENCODED_M3U8_URL&amp;origin=OPTIONAL_ORIGIN</code>
+                <code>/api/debug-manifest?url=ENCODED_M3U8_URL</code>
             </div>
             <div class="card">
                 <h2>Stats API</h2>
@@ -398,17 +386,8 @@ const DASHBOARD_HTML = `
             <p>Run common API calls directly from the dashboard and inspect beautified JSON output.</p>
             <div class="example-grid">
                 <div class="example-card">
-                    <label for="watch-order-id">Watch Order AniList ID</label>
-                    <input id="watch-order-id" value="21" />
-                    <div class="example-actions">
-                        <button class="btn" data-endpoint="watch-order">Run Watch Order</button>
-                    </div>
-                </div>
-                <div class="example-card">
                     <label for="manifest-url">Manifest URL</label>
                     <input id="manifest-url" placeholder="https://example.com/master.m3u8" />
-                    <label for="manifest-origin">Origin Override</label>
-                    <input id="manifest-origin" placeholder="https://pahe.la" />
                     <div class="example-actions">
                         <button class="btn" data-endpoint="manifest-debug">Run Manifest Debug</button>
                         <button class="btn secondary" data-endpoint="proxy-debug">Open Proxied Debug</button>
@@ -463,14 +442,7 @@ const DASHBOARD_HTML = `
         document.querySelectorAll('[data-endpoint]').forEach((button) => {
             button.addEventListener('click', async () => {
                 const action = button.getAttribute('data-endpoint');
-                const watchOrderId = document.getElementById('watch-order-id').value.trim();
                 const manifestUrl = document.getElementById('manifest-url').value.trim();
-                const manifestOrigin = document.getElementById('manifest-origin').value.trim();
-
-                if (action === 'watch-order') {
-                    await runJsonRequest('/api/watch-order?id=' + encodeURIComponent(watchOrderId || '21'));
-                    return;
-                }
 
                 if (action === 'manifest-debug') {
                     if (!manifestUrl) {
@@ -479,7 +451,6 @@ const DASHBOARD_HTML = `
                     }
 
                     const params = new URLSearchParams({ url: manifestUrl });
-                    if (manifestOrigin) params.set('origin', manifestOrigin);
                     await runJsonRequest('/api/debug-manifest?' + params.toString());
                     return;
                 }
@@ -491,7 +462,6 @@ const DASHBOARD_HTML = `
                     }
 
                     const params = new URLSearchParams({ url: manifestUrl, debug: '1' });
-                    if (manifestOrigin) params.set('origin', manifestOrigin);
                     window.open('/?' + params.toString(), '_blank');
                     setOutput(JSON.stringify({
                         opened: '/?' + params.toString()

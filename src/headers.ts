@@ -406,17 +406,8 @@ function findDomainGroup(hostname: string): DomainGroup | null {
 
 export function generateHeadersOriginal(
     url: URL,
-    customOrigin?: string
 ): Record<string, string> {
     const headers = Object.assign(Object.create(null), DEFAULT_HEADERS) as Record<string, string>;
-
-    if (customOrigin) {
-        headers["origin"] = customOrigin;
-        headers["referer"] = customOrigin.endsWith("/")
-            ? customOrigin
-            : `${customOrigin}/`;
-        return headers;
-    }
 
     const group = findDomainGroup(url.hostname);
 

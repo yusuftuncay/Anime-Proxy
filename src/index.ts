@@ -49,11 +49,9 @@ const app = new Hono();
 let requestCount = 0;
 let totalResponseTime = 0;
 const start_time = Date.now();
-const logs: string[] = [];
-
 // Lightweight metrics — only track proxy requests (skip dashboard/static endpoints)
 app.use("*", async (c, next) => {
-    const url = c.req.query("url");
+    const url = c.req.query("url") ?? c.req.query("u");
     if (!url) {
         await next();
         return;
@@ -62,23 +60,12 @@ app.use("*", async (c, next) => {
     await next();
     requestCount++;
     totalResponseTime += (performance.now() - start);
-
-    // Track last few proxy requests for the dashboard
-    logs.unshift(`[${new Date().toLocaleTimeString()}] Proxied: ${url.substring(0, 50)}...`);
-    if (logs.length > 5) logs.pop();
 });
 
 // ─── Help & Info Endpoints (HTMX Enhanced) ────────────────────────────────────
 
 // Dashboard and help handled within the main route to avoid shadowing proxy requests
 app.get("/help", handleDashboard);
-
-app.get("/api/logs", (c) => {
-    const logHtml = logs.length > 0
-        ? logs.map(l => `<div style="padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; color: #a5a5cc;">${l}</div>`).join("")
-        : `<div style="color: #666; font-style: italic;">No recent activity...</div>`;
-    return c.html(logHtml);
-});
 
 app.get("/api/stats", (c) => {
     const uptimeSeconds = Math.floor((Date.now() - start_time) / 1000);
@@ -131,12 +118,6 @@ app.get("/api/info", (c) => {
                 description: "Interactive dashboard and statistics dashboard.",
                 status: "Operational"
             },
-            watch_order: {
-                path: "/api/watch-order",
-                method: "GET",
-                description: "Scrape watch order from chiaki.site using AniList ID.",
-                status: "Operational"
-            },
             debug_manifest: {
                 path: "/api/debug-manifest",
                 method: "GET",
@@ -147,12 +128,6 @@ app.get("/api/info", (c) => {
                 path: "/api/stats",
                 method: "GET",
                 description: "Real-time performance metrics (HTMX fragment).",
-                status: "Operational"
-            },
-            logs: {
-                path: "/api/logs",
-                method: "GET",
-                description: "Recent proxy request logs (HTMX fragment).",
                 status: "Operational"
             },
             status: {
@@ -169,91 +144,6 @@ app.get("/api/info", (c) => {
 
 app.options("*", (c) => c.body(null, 204, CORS_HEADERS));
 
-// ─── Watch Order Logic ────────────────────────────────────────────────────────
-
-async function getMalIdFromAnilistId(anilistId: number): Promise<number | null> {
-    const query = `query ($id: Int) { Media (id: $id, type: ANIME) { idMal } }`;
-    try {
-        const response = await fetch("https://graphql.anilist.co", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ query, variables: { id: anilistId } }),
-        });
-        const data = await response.json();
-        return data?.data?.Media?.idMal || null;
-    } catch (err) {
-        console.error("AniList API error:", err);
-        return null;
-    }
-}
-
-async function scrapeWatchOrder(malId: number) {
-    const url = `https://chiaki.site/?/tools/watch_order/id/${malId}`;
-    try {
-        const response = await fetch(url, {
-            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
-        });
-        if (!response.ok) return null;
-        const html = await response.text();
-        const entries: any[] = [];
-        const trRegex = /<tr[^>]+data-id="(\d+)"[^>]*>([\s\S]*?)<\/tr>/g;
-        let match;
-
-        while ((match = trRegex.exec(html)) !== null) {
-            const trTag = match[0];
-            const content = match[2];
-            const idAttr = trTag.match(/data-id="(\d+)"/);
-            const typeAttr = trTag.match(/data-type="(\d+)"/);
-            const epsAttr = trTag.match(/data-eps="(\d+)"/);
-            const anilistIdAttr = trTag.match(/data-anilist-id="(\d*)"/);
-
-            if (!idAttr || !typeAttr) continue;
-            const type = parseInt(typeAttr[1]);
-            if (type !== 1 && type !== 3) continue;
-
-            const titleMatch = content.match(/<span class="wo_title">([\s\S]*?)<\/span>/);
-            const secondaryTitleMatch = content.match(/<span class="uk-text-small">([\s\S]*?)<\/span>/);
-            const imageMatch = content.match(/style="background-image:url\('([^']+)'\)"/);
-            const metaMatch = content.match(/<span class="wo_meta">([\s\S]*?)<\/span>/);
-            const ratingMatch = content.match(/<span class="wo_rating">([\s\S]*?)<\/span>/);
-
-            const metaRaw = metaMatch ? metaMatch[1].replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim() : "";
-            const parts = metaRaw.split('|').map(p => p.trim()).filter(p => p && !p.includes('★'));
-
-            let episodesCount = null, duration = null;
-            const epInfo = parts[2] || "";
-            if (epInfo.includes('×')) { [episodesCount, duration] = epInfo.split('×').map(s => s.trim()); }
-            else if (epInfo) { duration = epInfo; }
-
-            entries.push({
-                malId: parseInt(idAttr[1]),
-                anilistId: anilistIdAttr && anilistIdAttr[1] ? parseInt(anilistIdAttr[1]) : null,
-                title: titleMatch ? titleMatch[1].trim() : "Unknown",
-                secondaryTitle: secondaryTitleMatch ? secondaryTitleMatch[1].trim() : null,
-                type: type === 1 ? "TV" : "Movie",
-                episodes: epsAttr ? parseInt(epsAttr[1]) : 0,
-                image: imageMatch ? `https://chiaki.site/${imageMatch[1]}` : null,
-                metadata: { date: parts[0] || null, type: parts[1] || null, episodes: episodesCount, duration: duration },
-                rating: ratingMatch ? ratingMatch[1].trim() : null
-            });
-        }
-        return entries;
-    } catch (err) {
-        console.error("Scraping error:", err);
-        return null;
-    }
-}
-
-app.get("/api/watch-order", async (c) => {
-    const id = c.req.query("id");
-    if (!id) return c.json({ error: "Missing anilistId" }, 400, CORS_HEADERS);
-    const malId = await getMalIdFromAnilistId(parseInt(id));
-    if (!malId) return c.json({ error: "MAL ID not found" }, 404, CORS_HEADERS);
-    const data = await scrapeWatchOrder(malId);
-    if (!data) return c.json({ error: "Scraping failed" }, 502, CORS_HEADERS);
-    return c.json(data, 200, { ...CORS_HEADERS, "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=600" });
-});
-
 app.get("/api/debug-manifest", async (c) => {
     const targetUrlRaw = c.req.query("url");
     if (!targetUrlRaw) {
@@ -267,8 +157,7 @@ app.get("/api/debug-manifest", async (c) => {
         return c.json({ error: "Invalid url parameter" }, 400, CORS_HEADERS);
     }
 
-    const originParam = c.req.query("origin");
-    const upstreamHeaders = generateHeadersOriginal(targetUrl, originParam);
+    const upstreamHeaders = generateHeadersOriginal(targetUrl);
 
     try {
         const upstream = await fetch(targetUrl.href, {
@@ -282,7 +171,6 @@ app.get("/api/debug-manifest", async (c) => {
 
         return c.json({
             upstreamUrl: targetUrl.href,
-            origin: originParam ?? null,
             contentType,
             status: upstream.status,
             ...extractManifestDebug(textBody),
@@ -310,29 +198,119 @@ app.all("*", async (c) => {
     // Handle dashboard / info at root
     if (!targetUrlRaw) {
         const path = c.req.path;
-        if (path === "/" || path === "/api" || path === "/api/") {
-            return handleDashboard(c);
-        }
 
         // Relative redirection recovery
         const lastHost = getCookie(c, "_last_requested");
-        if (lastHost) {
+        if (lastHost && path !== "/" && path !== "/api" && path !== "/api/") {
             const remainingPath = path.startsWith("/api") ? path.slice(4) : path;
             const redirectTarget = new URL(lastHost + (remainingPath.startsWith("/") ? "" : "/") + remainingPath);
-            const debugEnabled = c.req.query("debug") === "1";
-            const redirectUrl = `/?${buildProxyQuery(redirectTarget, undefined, debugEnabled)}`;
+            const redirectUrl = `/?${buildProxyQuery(redirectTarget, c.req.query("debug") === "1")}`;
             return c.redirect(redirectUrl);
         }
+
+        // Root — return comprehensive API info
+        if (path === "/" || path === "/api" || path === "/api/") {
+            const uptimeSeconds = Math.floor((Date.now() - start_time) / 1000);
+            const avgLatency = requestCount > 0 ? (totalResponseTime / requestCount).toFixed(2) + "ms" : "0ms";
+
+            return c.json({
+                name: "Anime Proxy",
+                version: "1.2.0",
+                status: "Online",
+                runtime: "Bun",
+                performance: {
+                    uptime: formatUptime(uptimeSeconds),
+                    requests_served: requestCount,
+                    avg_latency: avgLatency,
+                },
+                endpoints: {
+                    proxy: {
+                        path: "/?url=<ENCODED_URL>",
+                        method: "GET | POST | HEAD",
+                        description: "Main proxy route. Fetches the target URL and streams the response through the proxy with correct headers.",
+                        status: "Operational",
+                        parameters: {
+                            url: { required: true, description: "The full target URL to proxy (URL-encoded)." },
+                            u: { required: false, description: "Encrypted target URL (XOR + base64url). Alternative to 'url'." },
+                            headers: { required: false, description: "JSON object of custom headers to send upstream. Origin/Referer cannot be overridden." },
+                            json: { required: false, description: "JSON body for POST requests. Sets Content-Type to application/json." },
+                            debug: { required: false, description: "Set to '1' to attach debug headers (X-Proxy-Debug-*) on M3U8 responses." },
+                            dashboard: { required: false, description: "Set to 'true' or '1' to force the interactive dashboard UI." },
+                        },
+                    },
+                    help: {
+                        path: "/help",
+                        method: "GET",
+                        description: "Interactive dashboard with live stats, proxy search, and API explorer.",
+                        status: "Operational",
+                    },
+                    debug_manifest: {
+                        path: "/api/debug-manifest?url=<ENCODED_M3U8_URL>",
+                        method: "GET",
+                        description: "Fetches an M3U8 manifest and returns parsed metadata: variant count, codecs, line count, and preview.",
+                        status: "Operational",
+                        parameters: {
+                            url: { required: true, description: "The M3U8 manifest URL to analyse." },
+                        },
+                    },
+                    info: {
+                        path: "/api/info",
+                        method: "GET",
+                        description: "Lightweight service metadata and live performance metrics.",
+                        status: "Operational",
+                    },
+                    stats: {
+                        path: "/api/stats",
+                        method: "GET",
+                        description: "Real-time performance metrics returned as an HTMX HTML fragment.",
+                        status: "Operational",
+                    },
+                    status_badge: {
+                        path: "/api/status",
+                        method: "GET",
+                        description: "Live status badge. Returns HTML by default, or JSON when Accept: application/json is set.",
+                        status: "Operational",
+                    },
+                },
+                usage: {
+                    basic_proxy: "GET /?url=https://example.com/video.m3u8",
+                    encrypted_proxy: "GET /?u=<XOR_ENCRYPTED_BASE64URL>",
+                    post_with_json: "POST /?url=https://api.example.com/endpoint&json={\"key\":\"value\"}",
+                    custom_headers: "GET /?url=https://example.com/video.m3u8&headers={\"x-custom\":\"value\"}",
+                    debug_mode: "GET /?url=https://example.com/master.m3u8&debug=1",
+                    manifest_debug: "GET /api/debug-manifest?url=https://example.com/master.m3u8",
+                },
+                features: [
+                    "M3U8 manifest rewriting with full URI/URL attribute support",
+                    "Automatic domain-based Origin/Referer header steering (40+ domain groups)",
+                    "XOR + base64url encrypted URL support via ?u= parameter",
+                    "3xx redirect following with proxy URL rewriting",
+                    "Relative path recovery via _last_requested cookie",
+                    "Range request passthrough for partial content",
+                    "15s upstream timeout with AbortController",
+                    "Media segment caching (immutable Cache-Control)",
+                    "CORS headers on all responses",
+                    "POST body forwarding with JSON shorthand",
+                ],
+                notes: {
+                    cors: "All responses include permissive CORS headers (Access-Control-Allow-Origin: *).",
+                    headers: "Origin and Referer are automatically set based on the target domain. Custom header overrides for these two are blocked.",
+                    m3u8: "M3U8 manifests are rewritten so all segment and variant URLs route back through the proxy.",
+                    encryption: "When XOR_KEY is configured, M3U8 segment URLs are encrypted with ?u= instead of ?url=.",
+                    caching: "Media segments (.ts, .mp4, .m4s, .aac, .vtt, .webm) get immutable cache headers. Manifests are no-cache.",
+                },
+            }, 200, CORS_HEADERS);
+        }
+
         return c.text("Missing URL parameter. Usage: /?url=<ENCODED_URL>", 400, CORS_HEADERS);
     }
 
     let targetUrl: URL;
     try { targetUrl = new URL(targetUrlRaw); } catch { return c.text(`Invalid URL: ${targetUrlRaw}`, 400, CORS_HEADERS); }
 
-    const originParam = c.req.query("origin");
     const debugEnabled = c.req.query("debug") === "1";
 
-    const upstreamHeaders = generateHeadersOriginal(targetUrl, originParam);
+    const upstreamHeaders = generateHeadersOriginal(targetUrl);
 
     // Forward Range and standard headers
     const clientHeaders = c.req.raw.headers;
@@ -397,7 +375,7 @@ app.all("*", async (c) => {
         const location = upstream.headers.get("location");
         if (location) {
             const resolvedLocation = resolveUrl(location, targetUrl);
-            const q = buildProxyQuery(resolvedLocation, originParam, debugEnabled, XOR_KEY ? encryptUrl : undefined);
+            const q = buildProxyQuery(resolvedLocation, debugEnabled, XOR_KEY ? encryptUrl : undefined);
             return c.redirect(`/?${q}`, upstream.status as any);
         }
     }
@@ -445,7 +423,7 @@ app.all("*", async (c) => {
                     if (end === -1) end = len;
                     const lineEnd = end > start && textBody[end - 1] === "\r" ? end - 1 : end;
                     if (rewritten.length > 0) rewritten += "\n";
-                    rewritten += processM3u8Line(textBody.slice(start, lineEnd), targetUrl, originParam, debugEnabled, XOR_KEY ? encryptUrl : undefined);
+                    rewritten += processM3u8Line(textBody.slice(start, lineEnd), targetUrl, undefined, debugEnabled, XOR_KEY ? encryptUrl : undefined);
                     start = end + 1;
                 }
 
