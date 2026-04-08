@@ -15,9 +15,9 @@ A high-performance, edge-ready M3U8 and binary proxy designed for seamless anime
 
 Deploy your own instance of Anime Proxy with a single click:
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/Vertixx01/anime-proxy)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Vertixx01/anime-proxy)
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vertixx01/anime-proxy)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/yusuftuncay/Anime-Proxy)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yusuftuncay/Anime-Proxy)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yusuftuncay/Anime-Proxy)
 
 ## 🛠️ Usage
 
@@ -56,7 +56,7 @@ Ensure you have [Bun](https://bun.sh/) installed:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Vertixx01/anime-proxy.git
+   git clone https://github.com/yusuftuncay/Anime-Proxy.git
    cd anime-proxy
    ```
 
